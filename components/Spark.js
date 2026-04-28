@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
+import { validateFile, extractText, uploadDocument, saveDocumentMetadata } from "../lib/documentUpload";
 import { useRouter } from "next/router";
 import { useTheme } from "../lib/ThemeContext";
 
@@ -39,8 +40,11 @@ export default function Spark({ user }) {
   const [browserSupport, setBrowserSupport] = useState(true);
   const [historyLoaded, setHistoryLoaded] = useState(false);
 
+  const [uploadStatus, setUploadStatus] = useState(null); // null | 'uploading' | 'extracting' | 'sending'
+
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const recognitionRef = useRef(null);
   const router = useRouter();
 
@@ -222,6 +226,87 @@ export default function Spark({ user }) {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push("/login");
+  };
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!file) return;
+
+    const validationError = validateFile(file);
+    if (validationError) {
+      setMessages(prev => [...prev, { role: "assistant", content: validationError }]);
+      return;
+    }
+
+    setUploadStatus("uploading");
+
+    let storagePath;
+    try {
+      storagePath = await uploadDocument(file, user.id);
+    } catch {
+      setUploadStatus(null);
+      setMessages(prev => [...prev, { role: "assistant", content: "Something went wrong on my end. Could you try once more?" }]);
+      return;
+    }
+
+    setUploadStatus("extracting");
+    let extractedText = null;
+    try {
+      extractedText = await extractText(file);
+    } catch {
+      // continue without text; will tell user below
+    }
+
+    try {
+      const fileType = file.name.split(".").pop().toLowerCase();
+      await saveDocumentMetadata(user.id, file.name, storagePath, fileType, file.size, extractedText || "");
+    } catch (err) {
+      console.error("Metadata save failed:", err);
+    }
+
+    const uploadNotice = { role: "assistant", content: "📄 Uploaded: " + file.name };
+    await saveMessage("assistant", uploadNotice.content);
+
+    if (!extractedText) {
+      setUploadStatus(null);
+      setMessages(prev => [...prev, uploadNotice, {
+        role: "assistant",
+        content: "I saved your document but couldn't read the text yet. Tell me what's in it?",
+      }]);
+      return;
+    }
+
+    // Capture current messages synchronously inside the setter, then call the API
+    let msgsForAPI;
+    setMessages(prev => {
+      msgsForAPI = [...prev, uploadNotice];
+      return msgsForAPI;
+    });
+
+    setUploadStatus("sending");
+    setLoading(true);
+
+    const docPrompt = "The user just uploaded a document called " + file.name + ". Here's what it says: " + extractedText + ". Read it warmly, find what's impressive about what they've written or done, and ask one gentle follow-up question.";
+    const apiMessages = [...msgsForAPI, { role: "user", content: docPrompt }];
+
+    try {
+      const raw = await callAPI(apiMessages);
+      const { message, insight } = parseResponse(raw);
+      setMessages(prev => [...prev, { role: "assistant", content: message }]);
+      await saveMessage("assistant", message);
+      if (insight) {
+        setInsights(prev => [...prev, insight]);
+        await saveInsight(insight);
+        setShowInsights(true);
+      }
+      if (voiceEnabled) setTimeout(() => speak(message), 200);
+    } catch {
+      setMessages(prev => [...prev, { role: "assistant", content: "I'm here. Tell me more." }]);
+    }
+
+    setUploadStatus(null);
+    setLoading(false);
   };
 
   if (!historyLoaded) {
@@ -407,10 +492,36 @@ export default function Spark({ user }) {
             </div>
           )}
 
+          {uploadStatus && (
+            <div style={{
+              margin: "0 20px 8px",
+              background: C.paper, border: `1px solid ${C.soft}`,
+              borderRadius: "12px", padding: "10px 16px",
+              display: "flex", alignItems: "center", gap: "10px",
+            }}>
+              <div style={{
+                width: "10px", height: "10px", background: C.accent,
+                borderRadius: "50%", animation: "pulse 1s ease infinite",
+              }} />
+              <span style={{ fontSize: "13px", color: C.softDark, flex: 1 }}>
+                {uploadStatus === "uploading" && "Uploading..."}
+                {uploadStatus === "extracting" && "Reading your document..."}
+                {uploadStatus === "sending" && "Sharing with Spark..."}
+              </span>
+            </div>
+          )}
+
           <div style={{
             padding: "14px 20px", borderTop: `1px solid ${C.soft}`,
             background: C.paper,
           }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx,.txt"
+              onChange={handleFileSelect}
+              style={{ display: "none" }}
+            />
             <div style={{
               display: "flex", gap: "10px", alignItems: "flex-end",
               background: C.bg, border: `1px solid ${listening ? C.red : C.soft}`,
@@ -430,6 +541,18 @@ export default function Spark({ user }) {
                   lineHeight: "1.5", resize: "none", maxHeight: "100px",
                 }}
               />
+              <button
+                onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                disabled={!!uploadStatus || loading}
+                title="Upload a document"
+                style={{
+                  width: "40px", height: "40px",
+                  background: uploadStatus ? C.soft : `${C.accent}40`,
+                  border: `1px solid ${C.soft}`,
+                  borderRadius: "12px", cursor: uploadStatus || loading ? "not-allowed" : "pointer",
+                  fontSize: "18px",
+                }}
+              >📎</button>
               {browserSupport && (
                 <button
                   onClick={handleMicClick}
@@ -489,6 +612,7 @@ export default function Spark({ user }) {
       <style jsx global>{`
         @keyframes bounce { 0%,100% { opacity:0.3; transform:translateY(0); } 50% { opacity:1; transform:translateY(-4px); } }
         @keyframes pulseRed { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.8); } }
+        @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(0.85); } }
       `}</style>
     </div>
   );
