@@ -1,8 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { supabase } from "../lib/supabase";
 import { validateFile, extractText, uploadDocument, saveDocumentMetadata } from "../lib/documentUpload";
 import { useRouter } from "next/router";
 import { useTheme } from "../lib/ThemeContext";
+
+const ResumeModal = dynamic(() => import("./ResumeModal"), { ssr: false });
 
 const parseResponse = (text) => {
   const insightMatch = text.match(/INSIGHT:\s*(.+)/i);
@@ -41,6 +44,7 @@ export default function Spark({ user }) {
   const [historyLoaded, setHistoryLoaded] = useState(false);
 
   const [uploadStatus, setUploadStatus] = useState(null); // null | 'uploading' | 'extracting' | 'sending'
+  const [showResumeModal, setShowResumeModal] = useState(false);
 
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -386,6 +390,20 @@ export default function Spark({ user }) {
             {darkMode ? "☀️" : "🌙"}
           </button>
 
+          <button
+            onClick={() => setShowResumeModal(true)}
+            title="Generate Resume"
+            style={{
+              background: C.bg,
+              border: `1px solid ${C.soft}`,
+              borderRadius: "20px", padding: "7px 12px",
+              fontSize: "12px", color: C.mid,
+              cursor: "pointer",
+            }}
+          >
+            📄
+          </button>
+
           {insights.length > 0 && (
             <button
               onClick={() => setShowInsights(!showInsights)}
@@ -614,6 +632,10 @@ export default function Spark({ user }) {
         @keyframes pulseRed { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.8); } }
         @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(0.85); } }
       `}</style>
+
+      {showResumeModal && (
+        <ResumeModal user={user} onClose={() => setShowResumeModal(false)} />
+      )}
     </div>
   );
 }
