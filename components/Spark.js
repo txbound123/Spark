@@ -1,19 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/router";
+import { useTheme } from "../lib/ThemeContext";
 
 const parseResponse = (text) => {
   const insightMatch = text.match(/INSIGHT:\s*(.+)/i);
   const insight = insightMatch ? insightMatch[1].trim() : null;
   const message = text.replace(/INSIGHT:\s*.+/i, "").trim();
   return { message, insight };
-};
-
-const C = {
-  bg: "#F5F0E8", paper: "#FDFAF4", dark: "#2C1810",
-  mid: "#6B4226", accent: "#C17F3A", accentLight: "#E8A84C",
-  soft: "#D4C4A8", softDark: "#B8A88A",
-  green: "#4A7C59", greenLight: "#EBF3EE", red: "#C0392B",
 };
 
 const speak = (text) => {
@@ -33,6 +27,7 @@ const speak = (text) => {
 };
 
 export default function Spark({ user }) {
+  const { C, darkMode, toggleDarkMode } = useTheme();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -292,6 +287,20 @@ export default function Spark({ user }) {
             {voiceEnabled ? "🔊" : "🔇"}
           </button>
 
+          <button
+            onClick={toggleDarkMode}
+            title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            style={{
+              background: C.bg,
+              border: `1px solid ${C.soft}`,
+              borderRadius: "20px", padding: "7px 12px",
+              fontSize: "12px", color: C.softDark,
+              cursor: "pointer",
+            }}
+          >
+            {darkMode ? "☀️" : "🌙"}
+          </button>
+
           {insights.length > 0 && (
             <button
               onClick={() => setShowInsights(!showInsights)}
@@ -384,7 +393,7 @@ export default function Spark({ user }) {
           {listening && (
             <div style={{
               margin: "0 20px 8px",
-              background: "#FEF2F2", border: `1px solid ${C.red}30`,
+              background: C.listeningBg, border: `1px solid ${C.red}30`,
               borderRadius: "12px", padding: "10px 16px",
               display: "flex", alignItems: "center", gap: "10px",
             }}>

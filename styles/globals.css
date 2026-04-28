@@ -4,6 +4,7 @@ html, body {
   font-family: 'Georgia', 'Palatino', serif;
   background: #F5F0E8;
   color: #2C1810;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 * {

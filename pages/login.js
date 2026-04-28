@@ -1,13 +1,10 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/router";
-
-const C = {
-  bg: "#F5F0E8", paper: "#FDFAF4", dark: "#2C1810",
-  mid: "#6B4226", accent: "#C17F3A", soft: "#D4C4A8", softDark: "#B8A88A",
-};
+import { useTheme } from "../lib/ThemeContext";
 
 export default function Login() {
+  const { C } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignup, setIsSignup] = useState(false);
@@ -76,7 +73,7 @@ export default function Login() {
               border: `1px solid ${C.soft}`,
               borderRadius: "10px", fontSize: "14px",
               marginBottom: "12px", background: C.bg,
-              fontFamily: "inherit",
+              color: C.dark, fontFamily: "inherit",
             }}
           />
           <input
@@ -91,7 +88,7 @@ export default function Login() {
               border: `1px solid ${C.soft}`,
               borderRadius: "10px", fontSize: "14px",
               marginBottom: "16px", background: C.bg,
-              fontFamily: "inherit",
+              color: C.dark, fontFamily: "inherit",
             }}
           />
 
